@@ -6,17 +6,6 @@ app = Flask(__name__)
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1531275791600455920/eqjzGUGNuyHBs9awFBnwWJwV-HLZ_lgNtygrbi_jcUnU8BHiKWhLNh3bnaoM3TA2Nov5"
 
-def get_public_ip():
-    try:
-        resp = requests.get('https://api.ipify.org?format=json', timeout=5)
-        return resp.json()['ip']
-    except:
-        try:
-            resp = requests.get('https://api.ipapi.co/json/', timeout=5)
-            return resp.json().get('ip', 'unknown')
-        except:
-            return 'unable_to_fetch'
-
 def send_to_discord(ip):
     payload = {"content": f"IP: {ip}"}
     try:
